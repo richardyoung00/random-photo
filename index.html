@@ -1,0 +1,114 @@
+<html lang="en">
+  <head>
+    <script src="https://apis.google.com/js/platform.js?onload=init" async defer></script>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            background-color: black;
+        }
+
+        .image {
+            height: 100%;
+            width: 100%;
+            object-fit: contain;
+        }
+    </style>
+  </head>
+  <body>
+    <img class="image" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
+    <script>
+
+        const params = {
+            client_id: '1019741534940-os8llpged0plilkejjo10p6j85kekh4b.apps.googleusercontent.com',
+            scope: 'https://www.googleapis.com/auth/photoslibrary.readonly'
+        }
+
+        let currentUser;
+
+        function init() {
+            gapi.load('auth2', function() {
+                gapi.auth2.init(params).then(
+                    (success) => {
+                        checkLoggedIn(gapi.auth2.getAuthInstance())
+                    },
+                    (fail) => {
+                        console.log('fail', fail)
+                    })
+            });
+        }
+
+        async function checkLoggedIn(GoogleAuth) {
+            currentUser = GoogleAuth.currentUser.get()
+
+            if (!currentUser.isSignedIn() || !currentUser.hasGrantedScopes(params.scope)) {
+                await GoogleAuth.signIn({scope: params.scope}).catch(e => console.error(e))
+            } else {
+                console.log('already signed in')
+            }
+
+            await fetchPhoto()
+
+        }
+
+        async function fetchPhoto() {
+            const authResponse = currentUser.getAuthResponse(true)
+
+            const photoIdList = await (await fetch('/photo-list.json')).json()
+            const randomId = Math.floor(Math.random() * (photoIdList.length - 1));
+
+            const headers = {
+                'Authorization': "Bearer " + authResponse.access_token,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+
+            const url = "https://photoslibrary.googleapis.com/v1/mediaItems/" + photoIdList[randomId]
+            const mediaItem = await (await fetch(url, {headers:headers})).json()
+
+
+            document.querySelector(".image").src = mediaItem.baseUrl + "=w2048-h1024"
+        }
+
+        async function fetchPhotoBatch() {
+
+        }
+
+        async function listPhotos() {
+            const authResponse = currentUser.getAuthResponse(true)
+
+            const headers = {
+                'Authorization': "Bearer " + authResponse.access_token,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            }
+            const body = {
+                pageSize: 100,
+                filters: {
+                    dateFilter: {
+                        dates: [
+                            {
+                                "year": 2015,
+                                "month": 10,
+                                "day": 3
+                            }
+                        ],
+                    },
+                    mediaTypeFilter: {
+                        mediaTypes: ["PHOTO"]
+                    },
+                }
+            }
+            const resp = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {method: "POST", headers: headers, body: JSON.stringify(body)})
+            const respJson = await resp.json()
+            let s = ""
+            for (let m of respJson.mediaItems) {
+                s += `"${m.id}",\n`
+            }
+
+            console.log(s)
+        }
+      
+    </script>
+  </body>
+</html>
