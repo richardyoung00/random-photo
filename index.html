@@ -12,6 +12,7 @@
             height: 100%;
             width: 100%;
             object-fit: contain;
+            cursor: pointer;
         }
     </style>
   </head>
@@ -19,12 +20,27 @@
     <img class="image" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
     <script>
 
+        let currentUser;
+        let photoList;
+
+        window.onload = () => {
+            getPhotoList()
+            document.querySelector(".image").addEventListener('click', () => {
+                fetchPhoto()
+            })
+        }
+
+        async function getPhotoList() {
+            if (!photoList) {
+                photoList = await (await fetch('/photo-list.json')).json();
+            }
+            return Promise.resolve(photoList)
+        }
+
         const params = {
             client_id: '1019741534940-os8llpged0plilkejjo10p6j85kekh4b.apps.googleusercontent.com',
             scope: 'https://www.googleapis.com/auth/photoslibrary.readonly'
         }
-
-        let currentUser;
 
         function init() {
             gapi.load('auth2', function() {
@@ -54,7 +70,7 @@
         async function fetchPhoto() {
             const authResponse = currentUser.getAuthResponse(true)
 
-            const photoIdList = await (await fetch('/photo-list.json')).json()
+            const photoIdList = await getPhotoList()
             const randomId = Math.floor(Math.random() * (photoIdList.length - 1));
 
             const headers = {
@@ -70,15 +86,9 @@
             document.querySelector(".image").src = mediaItem.baseUrl + "=w2048-h1024"
         }
 
-        async function fetchPhotoBatch() {
-
-        }
-
-        async function listPhotos() {
-            const authResponse = currentUser.getAuthResponse(true)
-
+        async function fetchPhotoBatch(accessToken, pageToken) {
             const headers = {
-                'Authorization': "Bearer " + authResponse.access_token,
+                'Authorization': "Bearer " + accessToken,
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
@@ -99,14 +109,38 @@
                     },
                 }
             }
-            const resp = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {method: "POST", headers: headers, body: JSON.stringify(body)})
-            const respJson = await resp.json()
-            let s = ""
-            for (let m of respJson.mediaItems) {
-                s += `"${m.id}",\n`
+            if (pageToken) {
+                body.pageToken = pageToken
             }
+            const resp = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search',
+                {method: "POST", headers: headers, body: JSON.stringify(body)})
+            return await resp.json()
+        }
 
-            console.log(s)
+        function getIdsAsJsonString(mediaItems) {
+            let idList = ''
+            for (let m of mediaItems) {
+                idList += `"${m.id}",\n`
+            }
+            return idList
+        }
+
+        async function listPhotos() {
+            const authResponse = currentUser.getAuthResponse(true)
+
+            let idList = ''
+
+            let batch = await fetchPhotoBatch(authResponse.access_token)
+            idList += getIdsAsJsonString(batch.mediaItems)
+            console.log(`Added ${batch.mediaItems.length} IDs`)
+
+            while(batch.nextPageToken) {
+                batch = await fetchPhotoBatch(authResponse.access_token, batch.nextPageToken)
+                idList += getIdsAsJsonString(batch.mediaItems)
+                console.log(`Added ${batch.mediaItems.length} IDs`)
+            }
+            console.log(idList)
+
         }
       
     </script>
