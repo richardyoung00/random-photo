@@ -32,7 +32,7 @@
 
         async function getPhotoList() {
             if (!photoList) {
-                photoList = await (await fetch('/photo-list.json')).json();
+                photoList = await (await fetch('./photo-list.json')).json();
             }
             return Promise.resolve(photoList)
         }
