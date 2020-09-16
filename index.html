@@ -13,27 +13,67 @@
             width: 100%;
             object-fit: contain;
             cursor: pointer;
+            transition: filter 300ms linear;
+        }
+
+        .spinner {
+            animation: rotate 2s linear infinite;
+            z-index: 2;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            margin: -25px 0 0 -25px;
+            width: 50px;
+            height: 50px;
+        
+            
+        }
+        .spinner .path {
+            stroke: rgba(255, 255, 255, 0.6);
+            stroke-linecap: round;
+            animation: dash 1.5s ease-in-out infinite;
+        }
+
+        @keyframes rotate {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        @keyframes dash {
+            0% {
+                stroke-dasharray: 1, 150;
+                stroke-dashoffset: 0;
+            }
+            50% {
+                stroke-dasharray: 90, 150;
+                stroke-dashoffset: -35;
+            }
+            100% {
+                stroke-dasharray: 90, 150;
+                stroke-dashoffset: -124;
+            }
         }
     </style>
   </head>
   <body>
+    <svg class="spinner" viewBox="0 0 50 50" style="display: none;">
+        <circle class="path" cx="25" cy="25" r="20" fill="none" stroke-width="5"></circle>
+    </svg>
     <img class="image" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=">
     <script>
 
         let currentUser;
         let photoList;
 
-        window.onload = () => {
-            getPhotoList()
-            document.querySelector(".image").addEventListener('click', () => {
-                fetchPhoto()
-            })
-        }
-
         async function getPhotoList() {
-            if (!photoList) {
-                photoList = await (await fetch('./photo-list.json')).json();
+            if (!window.localStorage['photoList']) {
+                console.log('Fetching photo list')
+                window.localStorage['photoList'] = JSON.stringify(await fetchPhotoIdsForDate());
+            } else {
+                console.log('Photo list found in cache')
             }
+            photoList = JSON.parse(window.localStorage['photoList'])
             return Promise.resolve(photoList)
         }
 
@@ -43,7 +83,17 @@
             fetch_basic_profile: false
         }
 
+        function showLoading() {
+            document.querySelector(".spinner").style.display = ""
+            document.querySelector(".image").style.filter = "blur(5px)"
+        }
+        function hideLoading() {
+            document.querySelector(".spinner").style.display = "none"
+            document.querySelector(".image").style.filter = ""
+        }
+
         function init() {
+            showLoading()
             gapi.load('auth2', function() {
                 gapi.auth2.init(params).then(
                     (success) => {
@@ -64,11 +114,16 @@
                 console.log('already signed in')
             }
 
+            document.querySelector(".image").addEventListener('click', () => {
+                fetchPhoto()
+            })
+
             await fetchPhoto()
 
         }
 
         async function fetchPhoto() {
+            showLoading()
             const authResponse = currentUser.getAuthResponse(true)
 
             const photoIdList = await getPhotoList()
@@ -85,6 +140,10 @@
 
 
             document.querySelector(".image").src = mediaItem.baseUrl + "=w2048-h1024"
+
+            document.querySelector(".image").onload = () => {
+                hideLoading()
+            }
         }
 
         async function fetchPhotoBatch(accessToken, pageToken) {
@@ -126,22 +185,26 @@
             return idList
         }
 
-        async function listPhotos() {
+        async function fetchPhotoIdsForDate() {
             const authResponse = currentUser.getAuthResponse(true)
 
-            let idList = ''
+            let idList = []
 
             let batch = await fetchPhotoBatch(authResponse.access_token)
-            idList += getIdsAsJsonString(batch.mediaItems)
+            for (let m of batch.mediaItems) {
+                    idList.push(m.id)
+            }
             console.log(`Added ${batch.mediaItems.length} IDs`)
 
             while(batch.nextPageToken) {
                 batch = await fetchPhotoBatch(authResponse.access_token, batch.nextPageToken)
-                idList += getIdsAsJsonString(batch.mediaItems)
+                for (let m of batch.mediaItems) {
+                    idList.push(m.id)
+                }
                 console.log(`Added ${batch.mediaItems.length} IDs`)
             }
             console.log(idList)
-
+            return idList
         }
       
     </script>
